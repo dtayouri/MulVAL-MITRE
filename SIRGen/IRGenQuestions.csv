@@ -1,0 +1,45 @@
+OntologyEntity,Question,NormalizedIR
+File,,
+File,Is there any file based permissions requirements for exploting the defeined scenario?,"canAccessFile(_host, _user, _access, _path)
+"
+File,,
+File,,
+File,,
+File,Is there any NFS export that may be exploted in this current attack scenario?,"nfsExportInfo(_server, _path, _access, _user)"
+File,Is already mounted NFS may influence the current defined attack scenarios?,"nfsMounted(_user, _userPath, _server, _serverPath, _access)"
+File,Is there any 'setuid' software related to the current attack scenario? (setuid program will have the privilage of the owner when executed),"setuidProgramInfo(_host, _software, _user)"
+File,,
+File,,
+File,,
+File,Is there any required file ownership definitions which may assure successful attack scenario?,"fileOwner(_host, _path, _owner)"
+File,Is there any required file ownership accessible definitions which may assure successful attack scenario?,"ownerAccessible(_host, _access, _path)"
+Host,"Where is the attacker starting point? (e.g. internet, some host)",attackerLocated(_)
+Host,,
+Host,#NAME?,"execCode(_principle, _host, _user)"
+Host,,"execCode(_host, _user)"
+Network,Is there any required netwrok connectivity rules to assure successful exploitation?,"hacl(_sourceHost, _destHost, _protocol, _port)"
+Network,Is there any specific principles that should obtain specific network access capabilities to assure successfult attack exploitation?,"netAccess(_principle, _srcHost, _dstHost, _protocol, _port)"
+Network,,"netAccess(_srcHost, _dstHost, _protocol, _port)"
+Network,,"netAccess(_host, _protocol, _port)"
+Network,Is any kind of network based host access may assure successful attack exploitation?,"canAccessHost(_principle, _host)"
+Principal,Is one of the used principals are the attacker?,malicious(_attacker)
+Principal,,compromised (_principle)
+Principal,,principalCompromised(_prinicipal)
+Principal,"Is there any specific principals that if they will be obtain by the attacker, they will assure successfult exploitation?","principalCompromised(_victimPrinicipal, _maliciousPrincipal)"
+Service,,
+Service,Is the current attack scenario involve some network services?,"networkServiceInfo(_host, _software, _protocol, _port, _user)"
+Service,Is there any loging services that related to the current attack scenario?,"logInService(_dstHost, _protocol, _port)"
+Service,Is there any local services which may be part of the current attack scenarios?,"localService(_host, _software, _user)"
+Software,Is there any required software dependecies to assure successful exploitation?,"dependsOn(_host, _software, _library)"
+Software,Which software should be installed on which hosts in the context of the current technique scenario?,"installed(_host,_software)"
+Software,"Is there any realted client software that when executed, may open a connection to a server over the network? ","clientProgram(_host, _program)"
+Software,,
+User,Which users are required to be configured in order to run the defined technique scenario?,"hasAccount(_user, _host, _perm)"
+Vulnerability,,"vulExists(_host, _vulID, _software, _range, _consequence)
+"
+Vulnerability,,
+Vulnerability,"Which vulnerabilities (e.g. registered CVEs, unregistered CVEs, miss-configurations, etc) are required to exploit the defined attack scenario?","vulHost(_host, _vulID, _software, _range, _consequence)
+"
+Vulnerability,"Which vulnerabilities related to end-to-end protocols (e.g. http, smtp) are required to exploit the defined attack scenario?","vulE2EProtocol(_host, _vulID, _protocol, _port, _range, _consequence)"
+Vulnerability,"Which vulnerabilities related to link protocols (e.g. ARP, Bluetooth) are required to exploit the defined attack scenario?","vulLinkProtocol(_srcHost, _dstHost, _vulID, _protocol, _range, _consequence)"
+Vulnerability,"Which vulnerabilities related to link protocols (e.g. ARP, Bluetooth) are required to exploit the defined attack scenario?","vulLinkProtocol(_linkID, _vulID, _protocol, _range, _consequence)"
