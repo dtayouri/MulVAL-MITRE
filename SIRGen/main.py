@@ -1,5 +1,3 @@
-from pyattck import Attck # https://pypi.org/project/pyattck/
-import mitreattack.attackToExcel.attackToExcel as attackToExcel
 import mitreattack.attackToExcel.stixToDf as stixToDf
 from stix2 import MemoryStore, Filter
 import requests
@@ -18,44 +16,46 @@ def openURL(url):
 def wrap(string, lenght=40):
     return '\n'.join(textwrap.wrap(string, lenght))
 
-# Helper method for testing data of ATT&CK STIX
-def printMitreTacticTecnique(attackdata):
-    # build_dataframes brings everything and takes a long time
-    #dataframes = attackToExcel.build_dataframes(attackdata, "enterprise-attack")
-
+# Helper method for testing data of ATT&CK STIX (brought from json)
+def printTacticTecniqueFromStix(attackStix):
     # Get Tactics
-    tatics_data = stixToDf.tacticsToDf(attackdata, "enterprise-attack")
-    tactics_df = tatics_data["tactics"]
-    tactics = []
-    for i in tactics_df.index:
-        tactics.append(tactics_df["ID"][i] + ' ' + tactics_df["name"][i])
+    filter = [
+        Filter('type', '=', 'x-mitre-tactic'),
+    ]
+    tactics = attackStix.query(filter)
+    for tactic in tactics:
+        print(tactic['x_mitre_shortname'])
+        print(tactic['external_references'][0]['external_id'] + ' ' + tactic['name'])
+        print(tactic['description'])
 
-    # get Pandas DataFrames for techniques, associated relationships, and citations
-    techniques_data = stixToDf.techniquesToDf(attackdata, "enterprise-attack")
-    techniques_df = techniques_data["techniques"]
+    tactics = buildTacticList(attackStix)
+    tacticId = tactics[0].split(' ')[0]  # Extract the ID that is the first part of the string
+    tacticDescription = getTacticField(attackStix, tacticId, 'description')
 
-    # show T1102 and sub-techniques of T1102
-    print(techniques_df[techniques_df["ID"].str.contains("T1102")]["name"])
+    # Techniques map into tactics by use of their kill_chain_phases property.
+    # Where the kill_chain_name is mitre-attack (for enterprise), the phase_name corresponds to the x_mitre_shortname property of an x-mitre-tactic object.
+    # Get Techniques of 'Collection' Tactic (TA0009)
+    filter = [
+        Filter('type', '=', 'attack-pattern'),
+        Filter('kill_chain_phases.kill_chain_name', '=', 'mitre-attack'),
+        Filter('kill_chain_phases.phase_name', '=', 'collection')
+    ]
+    techniques = attackStix.query(filter)
+    for technique in techniques:
+        print(technique['external_references'][0]['external_id'] + ' ' + technique['name'])
+        print(technique['description'])
 
-# Helper method for testing data of ATT&CK from pyattck
-def printTacticTecnique(attack):
-    for tactic in attack.enterprise.tactics:
-        print(tactic.id + ' ' + tactic.name)
-        print(tactic.description)
-
-    for technique in attack.enterprise.techniques:
-        print(technique.id + ' ' + technique.name)
-        print('Description: ' + technique.description)
-        print('Platforms: ')
-        for platform in technique.platforms:
-            print(platform + ' ')
-        print('Data Components: ')
-        for detection in technique.possible_detections:
-            ds = detection['data_source']
-            print(ds['source_data_element'] + ' ' + ds['relationship'] + ' ' + ds['target_data_element'])
+    techniques = buildTechniqueList(attackStix, tacticId)
+    techniqueID = techniques[0].split(' ')[0]  # Extract the ID that is the first part of the string
+    techniqueDescription, techniquePlatforms = getTechniqueDetails(attackStix, techniqueID)
+    print(techniqueDescription, techniquePlatforms)
+    subtechniques = buildSubtechniqueList(attackStix, techniqueID)
+    subtechniqueID = subtechniques[0].split(' ')[0]  # Extract the ID that is the first part of the string
+    subtechniqueDescription, subtechniquePlatforms = getTechniqueDetails(attackStix, subtechniqueID)
+    print(subtechniqueDescription, subtechniquePlatforms)
 
 # Main GUI method
-def displayTTP(attack, relationshipsDF, attackStix, dcToIrDF, questionsToIrDF, entitiesDF):
+def displayTTP(attackStix, relationshipsDF, dcToIrDF, questionsToIrDF, entitiesDF):
     # Methods for selection events
     def tacticSelected(self, *args):
         deleteText(tacticDescriptionText)
@@ -63,16 +63,15 @@ def displayTTP(attack, relationshipsDF, attackStix, dcToIrDF, questionsToIrDF, e
             return
         # Display Tactic description
         tacticID = tacticVar.get().split(' ')[0] # Extract the ID that is the first part of the string
-        global selectedTactic
-        selectedTactic = searchListById(attack.enterprise.tactics, tacticID)
-        insertText(tacticDescriptionText, "Selected Tactic: " + selectedTactic.id + ' ' + selectedTactic.name + "\n" + selectedTactic.description)
+        tacticDescription = getTacticField(attackStix, tacticID, 'description')
+        insertText(tacticDescriptionText, tacticDescription)
         # Update Technique drop-down
-        techniques = buildTechniqueList(selectedTactic)
+        techniques = buildTechniqueList(attackStix, tacticID)
         techniqueCombo.config(value=techniques)
         techniqueCombo.set('')
         subtechniqueCombo.set('')
         global entitiesInTactic  # Entities found in the description of selected Tactic
-        entitiesInTactic = findEntitiesInText(selectedTactic.description, entitiesDF)
+        entitiesInTactic = findEntitiesInText(tacticDescription, entitiesDF)
 
     def techniqueSelected(self, *args):
         deleteText(techniqueDescriptionText)
@@ -88,27 +87,27 @@ def displayTTP(attack, relationshipsDF, attackStix, dcToIrDF, questionsToIrDF, e
             return
         # Display Technique description
         techniqueID = techniqueVar.get().split(' ')[0] # Extract the ID that is the first part of the string
-        technique = searchListById(selectedTactic.techniques, techniqueID)
-        insertText(techniqueDescriptionText, "Selected Technique: " + technique.id + ' ' + technique.name + "\n" + technique.description)
+        techniqueDescription, techniquePlatforms = getTechniqueDetails(attackStix, techniqueID)
+        insertText(techniqueDescriptionText, techniqueDescription)
 
         # Update Subtechnique drop-down
-        subtechniques = buildSubtechniqueList(technique, selectedTactic)
+        subtechniques = buildSubtechniqueList(attackStix, techniqueID)
         subtechniqueCombo.config(value=subtechniques)
         subtechniqueCombo.set('')
 
         # Update platforms and CAPEC-ID
         platforms = ''
-        for platform in technique.platforms:
+        for platform in techniquePlatforms:
             platforms += platform + ' '
         insertText(techniquePlatformsText, platforms)
         # Technique object doesn't include CAPEC-ID; we will bring it from ATT&CK STIX Data
-        capecID, capecURL = findCapecIdAndUrl(attackStix, technique.name)
+        capecID, capecURL = findCapecIdAndUrl(attackStix, techniqueID)
         insertText(techniqueCapecIdText, capecID)
         techniqueCapecIdText.bind("<Button-1>", lambda e: openURL(capecURL))
 
         updateDataComponents(techniqueID, relationshipsDF, dataComponentsListBox)
         global entitiesInTechnique # Entities found in the description of selected Technique
-        entitiesInTechnique = findEntitiesInText(technique.description, entitiesDF)
+        entitiesInTechnique = findEntitiesInText(techniqueDescription, entitiesDF)
         updateEntities(questionsToIrDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, [])
 
     def subtechniqueSelected(self, *args):
@@ -125,19 +124,19 @@ def displayTTP(attack, relationshipsDF, attackStix, dcToIrDF, questionsToIrDF, e
             return
         # Display Subtechnique description
         subtechniqueID = subtechniqueVar.get().split(' ')[0] # Extract the ID that is the first part of the string
-        technique = searchListById(selectedTactic.techniques, subtechniqueID)
-        insertText(subtechniqueDescriptionText, "Selected Subtechnique: " + technique.id + ' ' + technique.name + "\n" + technique.description)
+        subtechniqueDescription, subtechniquePlatforms = getTechniqueDetails(attackStix, subtechniqueID)
+        insertText(subtechniqueDescriptionText, subtechniqueDescription)
         platforms = ''
-        for platform in technique.platforms:
+        for platform in subtechniquePlatforms:
             platforms += platform + ' '
         insertText(techniquePlatformsText, platforms)
         # Technique object doesn't include CAPEC-ID; we will bring it from ATT&CK STIX Data
-        capecID, capecURL = findCapecIdAndUrl(attackStix, technique.name)
+        capecID, capecURL = findCapecIdAndUrl(attackStix, subtechniqueID)
         insertText(techniqueCapecIdText, capecID)
         techniqueCapecIdText.bind("<Button-1>", lambda e: openURL(capecURL))
 
         updateDataComponents(subtechniqueID, relationshipsDF, dataComponentsListBox)
-        entitiesInSubtechnique = findEntitiesInText(technique.description, entitiesDF)
+        entitiesInSubtechnique = findEntitiesInText(subtechniqueDescription, entitiesDF)
         updateEntities(questionsToIrDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, entitiesInSubtechnique)
 
     # When a Data Component is selected, display interaction rules mapped to it
@@ -186,7 +185,7 @@ def displayTTP(attack, relationshipsDF, attackStix, dcToIrDF, questionsToIrDF, e
     mainframe.pack(pady=20, padx=20)
     fontTuple = ("Times new roman", 11, "normal")
 
-    tactics = buildTacticList(attack)
+    tactics = buildTacticList(attackStix)
     tacticVar = StringVar(root)
     techniqueVar = StringVar(root)
     subtechniqueVar = StringVar(root)
@@ -302,37 +301,76 @@ def displayTTP(attack, relationshipsDF, attackStix, dcToIrDF, questionsToIrDF, e
 
     root.mainloop()
 
-def buildTacticList(attack):
-    tactics = []
-    for tactic in attack.enterprise.tactics:
-        tactics.append(tactic.id + ' ' + tactic.name)
-    return  tactics
+# The following methods build Tactics, Techniques and Sub-techniques using ATT&CK-STIX json
+def buildTacticList(attackStix):
+    tacticsList = []
+    filter = [
+        Filter('type', '=', 'x-mitre-matrix'),
+    ]
+    matrix = attackStix.query(filter)
+    for tactic_id in matrix[0]['tactic_refs']:
+        tactic = attackStix.get(tactic_id)
+        tacticsList.append(tactic['external_references'][0]['external_id'] + ' ' + tactic['name'])
+    return tacticsList
 
-def buildTechniqueList(tactic):
-    techniques = []
-    for technique in tactic.techniques:
-        if not technique.subtechnique:
-            techniques.append(technique.id + ' ' + technique.name)
-    techniques.sort()
-    return techniques
+def getTacticField(attackStix, tacticId, fieldName):
+    filter = [
+        Filter('type', '=', 'x-mitre-tactic'),
+        Filter('external_references.external_id', '=', tacticId)
+    ]
+    tactic = attackStix.query(filter)
+    return tactic[0][fieldName]
 
-def buildSubtechniqueList(technique, tactic):
-    subtechniques = []
-    for tech in tactic.techniques:
-        if technique.id in tech.id and technique.id != tech.id:
-            subtechniques.append(tech.id + ' ' + tech.name)
-    subtechniques.sort()
-    return subtechniques
+def buildTechniqueList(attackStix, tacticId):
+    tacticShortName = getTacticField(attackStix, tacticId, 'x_mitre_shortname')
+    techniquesList = []
+    # Techniques map into tactics by use of their kill_chain_phases property.
+    # Where the kill_chain_name is mitre-attack (for enterprise), the phase_name corresponds to the x_mitre_shortname property of an x-mitre-tactic object.
+    filter = [
+        Filter('type', '=', 'attack-pattern'),
+        Filter('kill_chain_phases.kill_chain_name', '=', 'mitre-attack'),
+        Filter('kill_chain_phases.phase_name', '=', tacticShortName),
+        Filter('x_mitre_is_subtechnique', '=', False)
+    ]
+    techniques = attackStix.query(filter)
+    for technique in techniques:
+        techniquesList.append(technique['external_references'][0]['external_id'] + ' ' + technique['name'])
 
-# Technique object doesn't include CAPEC-ID; use ATT&CK STIX Data to find it
-def findCapecIdAndUrl(attackStix, techniqueName):
+    techniquesList.sort()
+    return techniquesList
+
+def getTechniqueDetails(attackStix, techniqueId):
+    filter = [
+        Filter('type', '=', 'attack-pattern'),
+        Filter('external_references.external_id', '=', techniqueId)
+    ]
+    technique = attackStix.query(filter)
+    return technique[0]['description'], technique[0]['x_mitre_platforms']
+
+def buildSubtechniqueList(attackStix, techniqueId):
+    subtechniquesList = []
+    filter = [
+        Filter('type', '=', 'attack-pattern'),
+        Filter('external_references.external_id', 'contains', techniqueId),
+        Filter('x_mitre_is_subtechnique', '=', True)
+    ]
+    subtechniques = attackStix.query(filter)
+    for subtechnique in subtechniques:
+        subtechniquesList.append(subtechnique['external_references'][0]['external_id'] + ' ' + subtechnique['name'])
+
+    subtechniquesList.sort()
+    return subtechniquesList
+
+
+# Find CAPEC-ID related to a Technique
+def findCapecIdAndUrl(attackStix, techniqueId):
     capecID = ''
     capecURL = ''
     # Retrieve the Technique
     filter = [
         Filter('type', '=', 'attack-pattern'),
-        Filter('name', '=', techniqueName)
-        #Filter('external_references.external_id', '=', techniqueId) This is an alternative, filter by Technique ID
+        #Filter('name', '=', techniqueName)
+        Filter('external_references.external_id', '=', techniqueId)
     ]
     technique = attackStix.query(filter)
     for ext_ref in technique[0].external_references:
@@ -420,24 +458,22 @@ def findEntitiesInText(text, entitiesDF):
 
 
 if __name__ == '__main__':
-    # Download and parse ATT&CK STIX data
-    #attackdata = attackToExcel.get_stix_data("enterprise-attack")
-    #printMitreTacticTecnique(attackdata)
-    attack = Attck() # Build the ATT&CK data structure from pyattck, which is easier to handle than get_stix_data()
-
-    # enterprise-attack.json can be found also at: https://github.com/mitre-attack/attack-stix-data/blob/master/enterprise-attack
-    # We will use this data structure to find connections between Techniques and CAPEC
+    # enterprise-attack.json can be found at: https://github.com/mitre-attack/attack-stix-data/blob/master/enterprise-attack
+    # We will use this data structure also to find connections between Techniques and CAPEC
     stix_json = requests.get(f"https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json").json()
     attackStix = MemoryStore(stix_data=stix_json["objects"])
+    #printTacticTecniqueFromStix(attackStix)
 
     # Read relationships, which include Data Components, from CSV to DataFrame
-    # ToDo: find out the source of "techniques_to_relationships_mapping.csv" and read from there
-    relationshipsDF = pandas.read_csv("file:techniques_to_relationships_mapping.csv", keep_default_na=False)
+    # Source of "techniques_to_relationships_mapping.csv":https://github.com/mitre-attack/attack-datasources/tree/main/docs
+    relationshipsFilePath = "file:techniques_to_relationships_mapping.csv"  # Read from local path
+    # Reading directly from github (the following line) doesn't work (read_csv throws exception)
+    #relationshipsFilePath = "https://raw.githubusercontent.com/mitre-attack/attack-datasources/main/docs/techniques_to_relationships_mapping.csv"
+    relationshipsDF = pandas.read_csv(relationshipsFilePath, keep_default_na=False)
     # Read mapping between Data Components and interaction rules
     dataComponentsToInteractionRulesDF = pandas.read_csv("file:DataComponentsToInteractionRulesMapping.csv")
     # Read mapping between questionss and interaction rules
     questionsToInteractionRulesDF = pandas.read_csv("file:IRGenQuestions.csv", keep_default_na=False)
     # Read list of attack ontology entities and their synonyms
     entitiesDF = pandas.read_csv("file:EntitiesAndSynonyms.csv", keep_default_na=False)
-    #printTacticTecnique(attack)
-    displayTTP(attack, relationshipsDF, attackStix,dataComponentsToInteractionRulesDF, questionsToInteractionRulesDF, entitiesDF)
+    displayTTP(attackStix, relationshipsDF, dataComponentsToInteractionRulesDF, questionsToInteractionRulesDF, entitiesDF)
