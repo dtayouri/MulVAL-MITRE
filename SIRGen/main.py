@@ -8,6 +8,10 @@ from tkinter import ttk
 import webbrowser
 import textwrap
 
+TACTIC_HIGHLIGHT = '#98FB98'
+TECHNIQUE_HIGHLIGHT = '#54FF9F'
+SUBTECHNIQUE_HIGHLIGHT = '#00CD66'
+
 # Opens given URL in a browser's tab
 def openURL(url):
     webbrowser.open_new(url)
@@ -71,7 +75,9 @@ def displayTTP(attackStix, relationshipsDF, dcToIrDF, questionsToIrDF, entitiesD
         techniqueCombo.set('')
         subtechniqueCombo.set('')
         global entitiesInTactic  # Entities found in the description of selected Tactic
-        entitiesInTactic = findEntitiesInText(tacticDescription, entitiesDF)
+        entitiesInTactic, foundEntitiesAndSynonyms = findEntitiesInText(tacticDescription, entitiesDF)
+        # Highlight in the description entities and their synonyms
+        highlight(tacticDescriptionText, foundEntitiesAndSynonyms, TACTIC_HIGHLIGHT)
 
     def techniqueSelected(self, *args):
         deleteText(techniqueDescriptionText)
@@ -107,8 +113,10 @@ def displayTTP(attackStix, relationshipsDF, dcToIrDF, questionsToIrDF, entitiesD
 
         updateDataComponents(techniqueID, relationshipsDF, dataComponentsListBox)
         global entitiesInTechnique # Entities found in the description of selected Technique
-        entitiesInTechnique = findEntitiesInText(techniqueDescription, entitiesDF)
-        updateEntities(questionsToIrDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, [])
+        entitiesInTechnique, foundEntitiesAndSynonyms = findEntitiesInText(techniqueDescription, entitiesDF)
+        # Highlight in the description entities and their synonyms
+        highlight(techniqueDescriptionText, foundEntitiesAndSynonyms, TECHNIQUE_HIGHLIGHT)
+        updateEntities(questionsToIrDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, [])
 
     def subtechniqueSelected(self, *args):
         deleteText(subtechniqueDescriptionText)
@@ -136,8 +144,10 @@ def displayTTP(attackStix, relationshipsDF, dcToIrDF, questionsToIrDF, entitiesD
         techniqueCapecIdText.bind("<Button-1>", lambda e: openURL(capecURL))
 
         updateDataComponents(subtechniqueID, relationshipsDF, dataComponentsListBox)
-        entitiesInSubtechnique = findEntitiesInText(subtechniqueDescription, entitiesDF)
-        updateEntities(questionsToIrDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, entitiesInSubtechnique)
+        entitiesInSubtechnique, foundEntitiesAndnyms = findEntitiesInText(subtechniqueDescription, entitiesDF)
+        # Highlight in the description entities and their synonyms
+        highlight(subtechniqueDescriptionText, foundEntitiesAndSynonyms, SUBTECHNIQUE_HIGHLIGHT)
+        updateEntities(questionsToIrDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, entitiesInSubtechnique)
 
     # When a Data Component is selected, display interaction rules mapped to it
     def dataComponentSelected(event):
@@ -157,6 +167,10 @@ def displayTTP(attackStix, relationshipsDF, dcToIrDF, questionsToIrDF, entitiesD
     # When an entity is selected, display questions mapped to it
     def entitySelected(event):
         selectedEntity = entitiesListBox.get(ANCHOR)
+        # Remove synonyms from selected entity's name
+        bracketIndex = selectedEntity.find(' (')
+        if bracketIndex != -1:
+            selectedEntity = selectedEntity[:bracketIndex]
         questionsListBox.delete(0, questionsListBox.size())
         if selectedEntity != '':
             updateQuestions(selectedEntity, questionsToIrDF, questionsListBox)
@@ -398,6 +412,23 @@ def searchListById(list, Id):
             return elem
     return None
 
+# Highlight the given list of words in textWidget
+def highlight(textWidget, words, color):
+    if "highlight" in textWidget.tag_names():
+        textWidget.tag_delete("highlight")
+    for word in words:
+        if word == '':  # Ignore empty words
+            continue
+        highlightStart = "1.0"
+        while True:
+            highlightStart = textWidget.search(word, highlightStart, nocase=1, stopindex='end')
+            if highlightStart == '':
+                break
+            highlightEnd = textWidget.index("%s+%dc" % (highlightStart, len(word)))
+            textWidget.tag_add("highlight", highlightStart, highlightEnd)
+            textWidget.tag_config("highlight", background=color)
+            highlightStart = highlightEnd
+
 # Build list of Data Components for given Technique (or Sub-technique)
 def updateDataComponents(techniqueID, relationshipsDF, dcListBox):
     dataComponents = []
@@ -412,22 +443,31 @@ def updateDcInteractionRules(dataComponent, dcToIrDF, dcIrTreeView):
         if dcToIrDF["DataComponent"][i].startswith(dataComponent):
             lineTag = 'line'+str(len(dcIrTreeView.get_children()) % 2)
             dcIrTreeView.insert('', 'end', text="1", values=(dcToIrDF["DataComponent"][i], dcToIrDF["InteractionRule"][i]), tag=lineTag)
-    dcIrTreeView.tag_configure('line0', background='gray') # This should color each second line, but doesn't work...
+    dcIrTreeView.tag_configure('line0', background='gray') # This highlights each second line, but the highlight is not visible in every monitor
 
-# Build list of entities and highlight entities that appear in the description of selected Tactic/Technique/Sub-technique
-def updateEntities(questionsToIrDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, entitiesInSubtechnique):
+# Build list of entities (and their synonyms)
+# Highlight entities that appear in the description of selected Tactic/Technique/Sub-technique
+def updateEntities(questionsToIrDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, entitiesInSubtechnique):
     entities = []
     for i in questionsToIrDF.index:
         if  not (questionsToIrDF["OntologyEntity"][i] in entities) and str(questionsToIrDF["Question"][i]) != '' and str(questionsToIrDF["NormalizedIR"][i]) != '':
             entities.append(questionsToIrDF["OntologyEntity"][i])
     for i in range(len(entities)):
-        entitiesListBox.insert(i, entities[i])
+        # Append synonyms to entity name
+        entityRow = entitiesDF.loc[entitiesDF["Entity"] == entities[i]]
+        synonyms = ''
+        if entityRow.size != 0:  # If a question was attached to a non-existing entity, the 'entity' will not be found
+            synonyms = entityRow["Synonyms"].item()
+        entity = entities[i]
+        if synonyms != '':
+            entity = entity + ' (' + synonyms + ')'
+        entitiesListBox.insert(i, entity)
         if entities[i] in entitiesInTactic:
-            entitiesListBox.itemconfig(i, bg='#98FB98')
+            entitiesListBox.itemconfig(i, bg=TACTIC_HIGHLIGHT)
         if entities[i] in entitiesInTechnique:
-            entitiesListBox.itemconfig(i, bg='#54FF9F')
+            entitiesListBox.itemconfig(i, bg=TECHNIQUE_HIGHLIGHT)
         if entities[i] in entitiesInSubtechnique:
-            entitiesListBox.itemconfig(i, bg='#00CD66')
+            entitiesListBox.itemconfig(i, bg=SUBTECHNIQUE_HIGHLIGHT)
 
 # Build list of questions for the selected entitiy
 def updateQuestions(selectedEntity, questionsToIrDF, questionsListBox):
@@ -448,13 +488,17 @@ def updateQuestionsIr(selectedQuestion, questionsToIrDF, questionsIrListBox):
     for i in range(len(questionIrs)):
         questionsIrListBox.insert(i, questionIrs[i])
 
-# Find if an entity or one of its sysnonyms appear in the given text
+# Find if an entity or one of its synonyms appear in the given text
 def findEntitiesInText(text, entitiesDF):
     foundEntities = []
+    foundEntitiesAndSynonyms = []
     for i in entitiesDF.index:
         if entitiesDF["Entity"][i] in text or (entitiesDF["Synonyms"][i] != '' and any(entity in text for entity in entitiesDF["Synonyms"][i].split(' '))):
             foundEntities.append(entitiesDF["Entity"][i])
-    return foundEntities
+            foundEntitiesAndSynonyms.append(entitiesDF["Entity"][i])
+            for entity in entitiesDF["Synonyms"][i].split(' '):
+                foundEntitiesAndSynonyms.append(entity)
+    return foundEntities, foundEntitiesAndSynonyms
 
 
 if __name__ == '__main__':
