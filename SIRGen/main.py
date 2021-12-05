@@ -59,7 +59,7 @@ def printTacticTecniqueFromStix(attackStix):
     print(subtechniqueDescription, subtechniquePlatforms)
 
 # Main GUI method
-def displayTTP(attackStix, relationshipsDF, dcToIrDF, questionsToIrDF, entitiesDF):
+def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponentsDF, entitiesDF):
     # Methods for selection events
     def tacticSelected(self, *args):
         deleteText(tacticDescriptionText)
@@ -116,7 +116,7 @@ def displayTTP(attackStix, relationshipsDF, dcToIrDF, questionsToIrDF, entitiesD
         entitiesInTechnique, foundEntitiesAndSynonyms = findEntitiesInText(techniqueDescription, entitiesDF)
         # Highlight in the description entities and their synonyms
         highlight(techniqueDescriptionText, foundEntitiesAndSynonyms, TECHNIQUE_HIGHLIGHT)
-        updateEntities(questionsToIrDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, [])
+        updateEntities(predicatesQuestionsAndDataComponentsDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, [])
 
     def subtechniqueSelected(self, *args):
         deleteText(subtechniqueDescriptionText)
@@ -144,10 +144,10 @@ def displayTTP(attackStix, relationshipsDF, dcToIrDF, questionsToIrDF, entitiesD
         techniqueCapecIdText.bind("<Button-1>", lambda e: openURL(capecURL))
 
         updateDataComponents(subtechniqueID, relationshipsDF, dataComponentsListBox)
-        entitiesInSubtechnique, foundEntitiesAndnyms = findEntitiesInText(subtechniqueDescription, entitiesDF)
+        entitiesInSubtechnique, foundEntitiesAndSynonyms = findEntitiesInText(subtechniqueDescription, entitiesDF)
         # Highlight in the description entities and their synonyms
         highlight(subtechniqueDescriptionText, foundEntitiesAndSynonyms, SUBTECHNIQUE_HIGHLIGHT)
-        updateEntities(questionsToIrDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, entitiesInSubtechnique)
+        updateEntities(predicatesQuestionsAndDataComponentsDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, entitiesInSubtechnique)
 
     # When a Data Component is selected, display interaction rules mapped to it
     def dataComponentSelected(event):
@@ -155,7 +155,7 @@ def displayTTP(attackStix, relationshipsDF, dcToIrDF, questionsToIrDF, entitiesD
         for item in dcInterctionRuleTreeView.get_children():
             dcInterctionRuleTreeView.delete(item)
         if selectedDataComponent != '':
-            updateDcInteractionRules(selectedDataComponent, dcToIrDF, dcInterctionRuleTreeView)
+            updateDcInteractionRules(selectedDataComponent, predicatesQuestionsAndDataComponentsDF, dcInterctionRuleTreeView)
 
     # When an interaction rules is double-clicked, copy it to the SIR construction area
     def dcIrDoubleClicked(event):
@@ -173,14 +173,14 @@ def displayTTP(attackStix, relationshipsDF, dcToIrDF, questionsToIrDF, entitiesD
             selectedEntity = selectedEntity[:bracketIndex]
         questionsListBox.delete(0, questionsListBox.size())
         if selectedEntity != '':
-            updateQuestions(selectedEntity, questionsToIrDF, questionsListBox)
+            updateQuestions(selectedEntity, predicatesQuestionsAndDataComponentsDF, questionsListBox)
 
     # When a question is selected, display interaction rules mapped to it
     def questionSelected(event):
         selectedQuestion = questionsListBox.get(ANCHOR)
         questionsIrListBox.delete(0, questionsIrListBox.size())
         if selectedQuestion != '':
-            updateQuestionsIr(selectedQuestion, questionsToIrDF, questionsIrListBox)
+            updateQuestionsIr(selectedQuestion, predicatesQuestionsAndDataComponentsDF, questionsIrListBox)
 
     # When an interaction rules is double-clicked, copy it to the SIR construction area
     def questionIrDoubleClicked(event):
@@ -438,21 +438,23 @@ def updateDataComponents(techniqueID, relationshipsDF, dcListBox):
     for i in range(len(dataComponents)):
         dcListBox.insert(i, dataComponents[i])
 
-def updateDcInteractionRules(dataComponent, dcToIrDF, dcIrTreeView):
-    for i in dcToIrDF.index:
-        if dcToIrDF["DataComponent"][i].startswith(dataComponent):
+def updateDcInteractionRules(dataComponent, predicatesDF, dcIrTreeView):
+    for i in predicatesDF.index:
+        if not pandas.isna(predicatesDF["DataComponent"][i]) and predicatesDF["DataComponent"][i].startswith(dataComponent):
             lineTag = 'line'+str(len(dcIrTreeView.get_children()) % 2)
-            dcIrTreeView.insert('', 'end', text="1", values=(dcToIrDF["DataComponent"][i], dcToIrDF["InteractionRule"][i]), tag=lineTag)
+            dcIrTreeView.insert('', 'end', text="1", values=(predicatesDF["DataComponent"][i], predicatesDF["Predicate"][i]), tag=lineTag)
     dcIrTreeView.tag_configure('line0', background='gray') # This highlights each second line, but the highlight is not visible in every monitor
 
 # Build list of entities (and their synonyms)
 # Highlight entities that appear in the description of selected Tactic/Technique/Sub-technique
-def updateEntities(questionsToIrDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, entitiesInSubtechnique):
+def updateEntities(predicatesDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, entitiesInSubtechnique):
     entities = []
-    for i in questionsToIrDF.index:
-        if  not (questionsToIrDF["OntologyEntity"][i] in entities) and str(questionsToIrDF["Question"][i]) != '' and str(questionsToIrDF["NormalizedIR"][i]) != '':
-            entities.append(questionsToIrDF["OntologyEntity"][i])
+    for i in predicatesDF.index:
+        if  not (predicatesDF["Entity"][i] in entities) and str(predicatesDF["Question"][i]) != '' and str(predicatesDF["Predicate"][i]) != '':
+            entities.append(predicatesDF["Entity"][i])
     for i in range(len(entities)):
+        if pandas.isna(entities[i]):
+            continue
         # Append synonyms to entity name
         entityRow = entitiesDF.loc[entitiesDF["Entity"] == entities[i]]
         synonyms = ''
@@ -470,21 +472,24 @@ def updateEntities(questionsToIrDF, entitiesDF, entitiesListBox, entitiesInTacti
             entitiesListBox.itemconfig(i, bg=SUBTECHNIQUE_HIGHLIGHT)
 
 # Build list of questions for the selected entitiy
-def updateQuestions(selectedEntity, questionsToIrDF, questionsListBox):
+def updateQuestions(selectedEntity, predicatesDF, questionsListBox):
     questions = []
-    for i in questionsToIrDF.index:
-        if questionsToIrDF["OntologyEntity"][i] == selectedEntity and str(questionsToIrDF["Question"][i]) != '' and str(questionsToIrDF["NormalizedIR"][i]) != '':
-            questions.append(questionsToIrDF["Question"][i])
+    for i in predicatesDF.index:
+        if predicatesDF["Entity"][i] == selectedEntity and str(predicatesDF["Question"][i]) != '' \
+                and str(predicatesDF["Predicate"][i]) != '' and predicatesDF["Question"][i] not in questions:
+            questions.append(predicatesDF["Question"][i])
     for i in range(len(questions)):
-        # ToDo: should wrap the long questions, but ListBox doesn't enable this, and adding \n with wrap() doesn't help
-        questionsListBox.insert(i, wrap(questions[i], lenght=85))
+        if not pandas.isna(questions[i]):
+            # ToDo: should wrap the long questions, but ListBox doesn't enable this, and adding \n with wrap() doesn't help
+            #questionsListBox.insert(i, wrap(questions[i], lenght=85))
+            questionsListBox.insert(i, questions[i])
 
 # Build list of interaction rules for the selected question
-def updateQuestionsIr(selectedQuestion, questionsToIrDF, questionsIrListBox):
+def updateQuestionsIr(selectedQuestion, predicatesDF, questionsIrListBox):
     questionIrs = []
-    for i in questionsToIrDF.index:
-        if questionsToIrDF["Question"][i] == selectedQuestion and str(questionsToIrDF["NormalizedIR"][i]) != '':
-            questionIrs.append(questionsToIrDF["NormalizedIR"][i])
+    for i in predicatesDF.index:
+        if predicatesDF["Question"][i] == selectedQuestion and str(predicatesDF["Predicate"][i]) != '':
+            questionIrs.append(predicatesDF["Predicate"][i])
     for i in range(len(questionIrs)):
         questionsIrListBox.insert(i, questionIrs[i])
 
@@ -493,10 +498,10 @@ def findEntitiesInText(text, entitiesDF):
     foundEntities = []
     foundEntitiesAndSynonyms = []
     for i in entitiesDF.index:
-        if entitiesDF["Entity"][i] in text or (entitiesDF["Synonyms"][i] != '' and any(entity in text for entity in entitiesDF["Synonyms"][i].split(' '))):
+        if entitiesDF["Entity"][i] in text or (entitiesDF["Synonyms"][i] != '' and any(entity in text for entity in entitiesDF["Synonyms"][i].split(', '))):
             foundEntities.append(entitiesDF["Entity"][i])
             foundEntitiesAndSynonyms.append(entitiesDF["Entity"][i])
-            for entity in entitiesDF["Synonyms"][i].split(' '):
+            for entity in entitiesDF["Synonyms"][i].split(', '):
                 foundEntitiesAndSynonyms.append(entity)
     return foundEntities, foundEntitiesAndSynonyms
 
@@ -514,10 +519,8 @@ if __name__ == '__main__':
     # Reading directly from github (the following line) doesn't work (read_csv throws exception)
     #relationshipsFilePath = "https://raw.githubusercontent.com/mitre-attack/attack-datasources/main/docs/techniques_to_relationships_mapping.csv"
     relationshipsDF = pandas.read_csv(relationshipsFilePath, keep_default_na=False)
-    # Read mapping between Data Components and interaction rules
-    dataComponentsToInteractionRulesDF = pandas.read_csv("file:DataComponentsToInteractionRulesMapping.csv")
-    # Read mapping between questionss and interaction rules
-    questionsToInteractionRulesDF = pandas.read_csv("file:IRGenQuestions.csv", keep_default_na=False)
+    # Read mapping between predicates, questions and data components
+    predicatesQuestionsAndDataComponentsDF = pandas.read_csv("file:SIRGenQuestionsAndDataComponents.csv")
     # Read list of attack ontology entities and their synonyms
     entitiesDF = pandas.read_csv("file:EntitiesAndSynonyms.csv", keep_default_na=False)
-    displayTTP(attackStix, relationshipsDF, dataComponentsToInteractionRulesDF, questionsToInteractionRulesDF, entitiesDF)
+    displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponentsDF, entitiesDF)
