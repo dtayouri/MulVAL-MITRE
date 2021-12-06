@@ -2,6 +2,7 @@ import mitreattack.attackToExcel.stixToDf as stixToDf
 from stix2 import MemoryStore, Filter
 import requests
 import pandas
+import numpy
 import tkinter
 from tkinter import *
 from tkinter import ttk
@@ -11,6 +12,7 @@ import textwrap
 TACTIC_HIGHLIGHT = '#98FB98'
 TECHNIQUE_HIGHLIGHT = '#54FF9F'
 SUBTECHNIQUE_HIGHLIGHT = '#00CD66'
+DC_HIGHLIGHT = 'cyan'
 
 # Opens given URL in a browser's tab
 def openURL(url):
@@ -111,7 +113,7 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
         insertText(techniqueCapecIdText, capecID)
         techniqueCapecIdText.bind("<Button-1>", lambda e: openURL(capecURL))
 
-        updateDataComponents(techniqueID, relationshipsDF, dataComponentsListBox)
+        updateDataComponents(techniqueID, relationshipsDF, predicatesQuestionsAndDataComponentsDF, dataComponentsListBox)
         global entitiesInTechnique # Entities found in the description of selected Technique
         entitiesInTechnique, foundEntitiesAndSynonyms = findEntitiesInText(techniqueDescription, entitiesDF)
         # Highlight in the description entities and their synonyms
@@ -143,7 +145,7 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
         insertText(techniqueCapecIdText, capecID)
         techniqueCapecIdText.bind("<Button-1>", lambda e: openURL(capecURL))
 
-        updateDataComponents(subtechniqueID, relationshipsDF, dataComponentsListBox)
+        updateDataComponents(subtechniqueID, relationshipsDF, predicatesQuestionsAndDataComponentsDF, dataComponentsListBox)
         entitiesInSubtechnique, foundEntitiesAndSynonyms = findEntitiesInText(subtechniqueDescription, entitiesDF)
         # Highlight in the description entities and their synonyms
         highlight(subtechniqueDescriptionText, foundEntitiesAndSynonyms, SUBTECHNIQUE_HIGHLIGHT)
@@ -430,13 +432,17 @@ def highlight(textWidget, words, color):
             highlightStart = highlightEnd
 
 # Build list of Data Components for given Technique (or Sub-technique)
-def updateDataComponents(techniqueID, relationshipsDF, dcListBox):
+def updateDataComponents(techniqueID, relationshipsDF, predicatesDF, dcListBox):
     dataComponents = []
     for i in relationshipsDF.index:
         if relationshipsDF["technique_id"][i] == techniqueID and str(relationshipsDF["source_data_element"][i]) != 'nan':
             dataComponents.append(relationshipsDF["source_data_element"][i] + ' ' + relationshipsDF["relationship"][i] + ' ' + relationshipsDF["target_data_element"][i])
     for i in range(len(dataComponents)):
         dcListBox.insert(i, dataComponents[i])
+        # Highlight data components that have predicates
+        for j in predicatesDF.index:
+            if not pandas.isna(predicatesDF["DataComponent"][j]) and predicatesDF["DataComponent"][j].startswith(dataComponents[i]):
+                dcListBox.itemconfig(i, bg=DC_HIGHLIGHT)
 
 def updateDcInteractionRules(dataComponent, predicatesDF, dcIrTreeView):
     for i in predicatesDF.index:
@@ -505,6 +511,26 @@ def findEntitiesInText(text, entitiesDF):
                 foundEntitiesAndSynonyms.append(entity)
     return foundEntities, foundEntitiesAndSynonyms
 
+# Predicates may be related to more than one data component.
+# In this case, all the data components will be in DataComponent column, divided by ||.
+# This method will duplicate such lines, each line with a different data component.
+def duplicatePredicatesWithMultiDC(predicatesDF):
+    for i in predicatesDF.index:
+        if not pandas.isna(predicatesDF["DataComponent"][i]) and '||' in predicatesDF["DataComponent"][i]:
+            dcs = predicatesDF["DataComponent"][i]
+            rowsToAdd = dcs.count('||')
+            # Add rows with the same values as the current row
+            newRow = predicatesDF.iloc[i]
+            for j in range(rowsToAdd):
+                predicatesDF = pandas.DataFrame(numpy.insert(predicatesDF.values, i, newRow, axis=0), columns=predicatesDF.columns)
+            # Update value of data component column of the new rows with each dc
+            nextRow = i
+            for dc in dcs.split('||'):
+                predicatesDF.at[nextRow, "DataComponent"] = dc
+                nextRow += 1
+
+    return predicatesDF
+
 
 if __name__ == '__main__':
     # enterprise-attack.json can be found at: https://github.com/mitre-attack/attack-stix-data/blob/master/enterprise-attack
@@ -521,6 +547,7 @@ if __name__ == '__main__':
     relationshipsDF = pandas.read_csv(relationshipsFilePath, keep_default_na=False)
     # Read mapping between predicates, questions and data components
     predicatesQuestionsAndDataComponentsDF = pandas.read_csv("file:SIRGenQuestionsAndDataComponents.csv")
+    predicatesQuestionsAndDataComponentsDF = duplicatePredicatesWithMultiDC(predicatesQuestionsAndDataComponentsDF)
     # Read list of attack ontology entities and their synonyms
     entitiesDF = pandas.read_csv("file:EntitiesAndSynonyms.csv", keep_default_na=False)
     displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponentsDF, entitiesDF)
