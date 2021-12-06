@@ -1,4 +1,3 @@
-import mitreattack.attackToExcel.stixToDf as stixToDf
 from stix2 import MemoryStore, Filter
 import requests
 import pandas
@@ -23,12 +22,12 @@ def wrap(string, lenght=40):
     return '\n'.join(textwrap.wrap(string, lenght))
 
 # Helper method for testing data of ATT&CK STIX (brought from json)
-def printTacticTecniqueFromStix(attackStix):
+def printTacticTechniqueFromStix(attackStix):
     # Get Tactics
-    filter = [
+    tacticFilter = [
         Filter('type', '=', 'x-mitre-tactic'),
     ]
-    tactics = attackStix.query(filter)
+    tactics = attackStix.query(tacticFilter)
     for tactic in tactics:
         print(tactic['x_mitre_shortname'])
         print(tactic['external_references'][0]['external_id'] + ' ' + tactic['name'])
@@ -41,12 +40,12 @@ def printTacticTecniqueFromStix(attackStix):
     # Techniques map into tactics by use of their kill_chain_phases property.
     # Where the kill_chain_name is mitre-attack (for enterprise), the phase_name corresponds to the x_mitre_shortname property of an x-mitre-tactic object.
     # Get Techniques of 'Collection' Tactic (TA0009)
-    filter = [
+    sampleFilter = [
         Filter('type', '=', 'attack-pattern'),
         Filter('kill_chain_phases.kill_chain_name', '=', 'mitre-attack'),
         Filter('kill_chain_phases.phase_name', '=', 'collection')
     ]
-    techniques = attackStix.query(filter)
+    techniques = attackStix.query(sampleFilter)
     for technique in techniques:
         print(technique['external_references'][0]['external_id'] + ' ' + technique['name'])
         print(technique['description'])
@@ -61,14 +60,14 @@ def printTacticTecniqueFromStix(attackStix):
     print(subtechniqueDescription, subtechniquePlatforms)
 
 # Main GUI method
-def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponentsDF, entitiesDF):
+def displayTTP(attackStix, relationshipsDF, predicatesDF, entitiesDF):
     # Methods for selection events
     def tacticSelected(self, *args):
         deleteText(tacticDescriptionText)
         if tacticVar.get() == '':
             return
         # Display Tactic description
-        tacticID = tacticVar.get().split(' ')[0] # Extract the ID that is the first part of the string
+        tacticID = tacticVar.get().split(' ')[0]  # Extract the ID that is the first part of the string
         tacticDescription = getTacticField(attackStix, tacticID, 'description')
         insertText(tacticDescriptionText, tacticDescription)
         # Update Technique drop-down
@@ -94,7 +93,7 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
         if techniqueVar.get() == '':
             return
         # Display Technique description
-        techniqueID = techniqueVar.get().split(' ')[0] # Extract the ID that is the first part of the string
+        techniqueID = techniqueVar.get().split(' ')[0]  # Extract the ID that is the first part of the string
         techniqueDescription, techniquePlatforms = getTechniqueDetails(attackStix, techniqueID)
         insertText(techniqueDescriptionText, techniqueDescription)
 
@@ -113,12 +112,12 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
         insertText(techniqueCapecIdText, capecID)
         techniqueCapecIdText.bind("<Button-1>", lambda e: openURL(capecURL))
 
-        updateDataComponents(techniqueID, relationshipsDF, predicatesQuestionsAndDataComponentsDF, dataComponentsListBox)
+        updateDataComponents(techniqueID, relationshipsDF, predicatesDF, dataComponentsListBox)
         global entitiesInTechnique # Entities found in the description of selected Technique
         entitiesInTechnique, foundEntitiesAndSynonyms = findEntitiesInText(techniqueDescription, entitiesDF)
         # Highlight in the description entities and their synonyms
         highlight(techniqueDescriptionText, foundEntitiesAndSynonyms, TECHNIQUE_HIGHLIGHT)
-        updateEntities(predicatesQuestionsAndDataComponentsDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, [])
+        updateEntities(predicatesDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, [])
 
     def subtechniqueSelected(self, *args):
         deleteText(subtechniqueDescriptionText)
@@ -133,7 +132,7 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
         if subtechniqueVar.get() == '':
             return
         # Display Subtechnique description
-        subtechniqueID = subtechniqueVar.get().split(' ')[0] # Extract the ID that is the first part of the string
+        subtechniqueID = subtechniqueVar.get().split(' ')[0]  # Extract the ID that is the first part of the string
         subtechniqueDescription, subtechniquePlatforms = getTechniqueDetails(attackStix, subtechniqueID)
         insertText(subtechniqueDescriptionText, subtechniqueDescription)
         platforms = ''
@@ -145,11 +144,11 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
         insertText(techniqueCapecIdText, capecID)
         techniqueCapecIdText.bind("<Button-1>", lambda e: openURL(capecURL))
 
-        updateDataComponents(subtechniqueID, relationshipsDF, predicatesQuestionsAndDataComponentsDF, dataComponentsListBox)
+        updateDataComponents(subtechniqueID, relationshipsDF, predicatesDF, dataComponentsListBox)
         entitiesInSubtechnique, foundEntitiesAndSynonyms = findEntitiesInText(subtechniqueDescription, entitiesDF)
         # Highlight in the description entities and their synonyms
         highlight(subtechniqueDescriptionText, foundEntitiesAndSynonyms, SUBTECHNIQUE_HIGHLIGHT)
-        updateEntities(predicatesQuestionsAndDataComponentsDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, entitiesInSubtechnique)
+        updateEntities(predicatesDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, entitiesInSubtechnique)
 
     # When a Data Component is selected, display interaction rules mapped to it
     def dataComponentSelected(event):
@@ -157,7 +156,7 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
         for item in dcInterctionRuleTreeView.get_children():
             dcInterctionRuleTreeView.delete(item)
         if selectedDataComponent != '':
-            updateDcInteractionRules(selectedDataComponent, predicatesQuestionsAndDataComponentsDF, dcInterctionRuleTreeView)
+            updateDcInteractionRules(selectedDataComponent, predicatesDF, dcInterctionRuleTreeView)
 
     # When an interaction rules is double-clicked, copy it to the SIR construction area
     def dcIrDoubleClicked(event):
@@ -175,14 +174,14 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
             selectedEntity = selectedEntity[:bracketIndex]
         questionsListBox.delete(0, questionsListBox.size())
         if selectedEntity != '':
-            updateQuestions(selectedEntity, predicatesQuestionsAndDataComponentsDF, questionsListBox)
+            updateQuestions(selectedEntity, predicatesDF, questionsListBox)
 
     # When a question is selected, display interaction rules mapped to it
     def questionSelected(event):
         selectedQuestion = questionsListBox.get(ANCHOR)
         questionsIrListBox.delete(0, questionsIrListBox.size())
         if selectedQuestion != '':
-            updateQuestionsIr(selectedQuestion, predicatesQuestionsAndDataComponentsDF, questionsIrListBox)
+            updateQuestionsIr(selectedQuestion, predicatesDF, questionsIrListBox)
 
     # When an interaction rules is double-clicked, copy it to the SIR construction area
     def questionIrDoubleClicked(event):
@@ -211,7 +210,7 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
     Label(mainframe, text="Tactic Description:", height=2).grid(row=2, column=1, sticky=W)
     tacticDescriptionText = Text(mainframe, height=10, width = 76, padx=5, pady=5, wrap=WORD)
     tacticDescriptionScroll = Scrollbar(mainframe)
-    tacticDescriptionText.configure(yscrollcommand=tacticDescriptionScroll.set, font = fontTuple, state='disabled')
+    tacticDescriptionText.configure(yscrollcommand=tacticDescriptionScroll.set, font=fontTuple, state='disabled')
     tacticDescriptionText.grid(row=3, column=1, columnspan=4, rowspan=7)
     tacticDescriptionScroll.config(command=tacticDescriptionText.yview)
     tacticDescriptionScroll.grid(row=3, column=5, columnspan=1, rowspan=7, sticky='ENS')
@@ -221,19 +220,19 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
     techniqueCombo = ttk.Combobox(mainframe, state='readonly', width=50, textvariable=techniqueVar)
     techniqueCombo.grid(row=10, column=2, columnspan=3, padx=10, pady=2, sticky='w')
     Label(mainframe, text="Technique Description:", height=2).grid(row=11, column=1, sticky=W)
-    techniqueDescriptionText = Text(mainframe, height=11, width = 76, padx=2, pady=2, wrap=WORD)
+    techniqueDescriptionText = Text(mainframe, height=11, width=76, padx=2, pady=2, wrap=WORD)
     techniqueDescriptionScroll = Scrollbar(mainframe)
-    techniqueDescriptionText.configure(yscrollcommand=techniqueDescriptionScroll.set, font = fontTuple, state='disabled')
+    techniqueDescriptionText.configure(yscrollcommand=techniqueDescriptionScroll.set, font=fontTuple, state='disabled')
     techniqueDescriptionText.grid(row=12, column=1, columnspan=4, rowspan=5)
     techniqueDescriptionScroll.config(command=techniqueDescriptionText.yview)
     techniqueDescriptionScroll.grid(row=12, column=5, columnspan=1, rowspan=5, sticky='ENS')
     techniqueVar.trace_add('write', techniqueSelected)
 
     Label(mainframe, text="Select a Subtechnique: ", height=2).grid(row=17, column=1)
-    subtechniqueCombo = ttk.Combobox(mainframe, width= 50, state='readonly', textvariable=subtechniqueVar)
+    subtechniqueCombo = ttk.Combobox(mainframe, width=50, state='readonly', textvariable=subtechniqueVar)
     subtechniqueCombo.grid(row=17, column=2, columnspan=3, padx=10, pady=2, sticky='w')
     Label(mainframe, text="Sub-technique Description:", height=2).grid(row=18, column=1, sticky=W)
-    subtechniqueDescriptionText = Text(mainframe, height=11, width = 76, padx=2, pady=2, wrap=WORD)
+    subtechniqueDescriptionText = Text(mainframe, height=11, width=76, padx=2, pady=2, wrap=WORD)
     subtechniqueDescriptionScroll = Scrollbar(mainframe)
     subtechniqueDescriptionText.configure(yscrollcommand=subtechniqueDescriptionScroll.set, font=fontTuple, state='disabled')
     subtechniqueDescriptionText.grid(row=19, column=1, columnspan=4, rowspan=5)
@@ -244,18 +243,18 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
     Label(mainframe, text="Platforms: ", height=2).grid(row=24, column=1)
     techniquePlatformsText = Text(mainframe, height=1, width=50, padx=2, pady=2, wrap=WORD)
     techniquePlatformsText.grid(row=24, column=2, columnspan=2, rowspan=1)
-    techniquePlatformsText.configure(font = fontTuple, state='disabled')
+    techniquePlatformsText.configure(font=fontTuple, state='disabled')
     Label(mainframe, text="CAPEC ID: ", height=2).grid(row=25, column=1)
     techniqueCapecIdText = Text(mainframe, height=1, width=50, padx=2, pady=2, wrap=WORD)
     techniqueCapecIdText.grid(row=25, column=2, columnspan=2, rowspan=1)
-    techniqueCapecIdText.configure(font = fontTuple, fg= 'blue', cursor='trek', state='disabled')
+    techniqueCapecIdText.configure(font=fontTuple, fg= 'blue', cursor='trek', state='disabled')
 
-    Label(mainframe, text="  ").grid(row=1, column=6) # Filler column
+    Label(mainframe, text="  ").grid(row=1, column=6)  # Filler column
 
     Label(mainframe, text="Technique/Sub-technique Data Components:", height=2).grid(row=1, column=7, sticky=W)
     dataComponentsListBox = Listbox(mainframe, height=11, width=88)
     dataComponentsScroll = Scrollbar(mainframe)
-    dataComponentsListBox.configure(yscrollcommand=dataComponentsScroll.set, font = fontTuple)
+    dataComponentsListBox.configure(yscrollcommand=dataComponentsScroll.set, font=fontTuple)
     dataComponentsListBox.grid(row=2, column=7, columnspan=4, rowspan=8)
     dataComponentsScroll.config(command=dataComponentsListBox.yview)
     dataComponentsScroll.grid(row=2, column=11, columnspan=1, rowspan=8, sticky='ENS')
@@ -275,19 +274,19 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
     dcInterctionRuleTreeView.bind("<Double-1>", dcIrDoubleClicked)
 
     Label(mainframe, text="Interaction rule construction area:", height=2).grid(row=17, column=7, sticky=W)
-    irConstructionText = Text(mainframe, height=13, width = 88, padx=2, pady=2, wrap=WORD)
+    irConstructionText = Text(mainframe, height=13, width=88, padx=2, pady=2, wrap=WORD)
     irConstructionScroll = Scrollbar(mainframe)
     irConstructionText.configure(yscrollcommand=irConstructionScroll.set, font=fontTuple)
     irConstructionText.grid(row=18, column=7, columnspan=4, rowspan=6)
     irConstructionScroll.config(command=irConstructionText.yview)
     irConstructionScroll.grid(row=18, column=11, columnspan=1, rowspan=6, sticky='ENS')
 
-    Label(mainframe, text="  ").grid(row=1, column=12) # Filler column
+    Label(mainframe, text="  ").grid(row=1, column=12)  # Filler column
 
     Label(mainframe, text="Attack entities (entities found in the TTP descriptions are highlighted):", height=2).grid(row=1, column=13, sticky=W)
     entitiesListBox = Listbox(mainframe, height=11, width=85)
     entitiesScroll = Scrollbar(mainframe)
-    entitiesListBox.configure(yscrollcommand=entitiesScroll.set, font = fontTuple)
+    entitiesListBox.configure(yscrollcommand=entitiesScroll.set, font=fontTuple)
     entitiesListBox.grid(row=2, column=13, columnspan=4, rowspan=8)
     entitiesScroll.config(command=entitiesListBox.yview)
     entitiesScroll.grid(row=2, column=17, columnspan=1, rowspan=8, sticky='ENS')
@@ -296,7 +295,7 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
     Label(mainframe, text="Guided questions:", height=2).grid(row=10, column=13, sticky=W)
     questionsListBox = Listbox(mainframe, height=13, width=85)
     questionsScroll = Scrollbar(mainframe)
-    questionsListBox.configure(yscrollcommand=questionsScroll.set, font = fontTuple)
+    questionsListBox.configure(yscrollcommand=questionsScroll.set, font=fontTuple)
     questionsListBox.grid(row=11, column=13, columnspan=4, rowspan=6)
     questionsScroll.config(command=questionsListBox.yview)
     questionsScroll.grid(row=11, column=17, columnspan=1, rowspan=6, sticky='ENS')
@@ -305,7 +304,7 @@ def displayTTP(attackStix, relationshipsDF, predicatesQuestionsAndDataComponents
     Label(mainframe, text="Interaction rules realted to the selected question:", height=2).grid(row=17, column=13, sticky=W)
     questionsIrListBox = Listbox(mainframe, height=13, width=85)
     questionsIrScroll = Scrollbar(mainframe)
-    questionsIrListBox.configure(yscrollcommand=questionsIrScroll.set, font = fontTuple)
+    questionsIrListBox.configure(yscrollcommand=questionsIrScroll.set, font=fontTuple)
     questionsIrListBox.grid(row=18, column=13, columnspan=4, rowspan=6)
     questionsIrScroll.config(command=questionsIrListBox.yview)
     questionsIrScroll.grid(row=18, column=17, columnspan=1, rowspan=6, sticky='ENS')
@@ -342,13 +341,13 @@ def buildTechniqueList(attackStix, tacticId):
     techniquesList = []
     # Techniques map into tactics by use of their kill_chain_phases property.
     # Where the kill_chain_name is mitre-attack (for enterprise), the phase_name corresponds to the x_mitre_shortname property of an x-mitre-tactic object.
-    filter = [
+    techniqueFilter = [
         Filter('type', '=', 'attack-pattern'),
         Filter('kill_chain_phases.kill_chain_name', '=', 'mitre-attack'),
         Filter('kill_chain_phases.phase_name', '=', tacticShortName),
         Filter('x_mitre_is_subtechnique', '=', False)
     ]
-    techniques = attackStix.query(filter)
+    techniques = attackStix.query(techniqueFilter)
     for technique in techniques:
         techniquesList.append(technique['external_references'][0]['external_id'] + ' ' + technique['name'])
 
@@ -356,21 +355,21 @@ def buildTechniqueList(attackStix, tacticId):
     return techniquesList
 
 def getTechniqueDetails(attackStix, techniqueId):
-    filter = [
+    techniqueFilter = [
         Filter('type', '=', 'attack-pattern'),
         Filter('external_references.external_id', '=', techniqueId)
     ]
-    technique = attackStix.query(filter)
+    technique = attackStix.query(techniqueFilter)
     return technique[0]['description'], technique[0]['x_mitre_platforms']
 
 def buildSubtechniqueList(attackStix, techniqueId):
     subtechniquesList = []
-    filter = [
+    subtechniqueFilter = [
         Filter('type', '=', 'attack-pattern'),
         Filter('external_references.external_id', 'contains', techniqueId),
         Filter('x_mitre_is_subtechnique', '=', True)
     ]
-    subtechniques = attackStix.query(filter)
+    subtechniques = attackStix.query(subtechniqueFilter)
     for subtechnique in subtechniques:
         subtechniquesList.append(subtechnique['external_references'][0]['external_id'] + ' ' + subtechnique['name'])
 
@@ -383,12 +382,12 @@ def findCapecIdAndUrl(attackStix, techniqueId):
     capecID = ''
     capecURL = ''
     # Retrieve the Technique
-    filter = [
+    techniqueFilter = [
         Filter('type', '=', 'attack-pattern'),
         #Filter('name', '=', techniqueName)
         Filter('external_references.external_id', '=', techniqueId)
     ]
-    technique = attackStix.query(filter)
+    technique = attackStix.query(techniqueFilter)
     for ext_ref in technique[0].external_references:
         if ext_ref.source_name == 'capec':
             capecID = ext_ref.external_id
@@ -408,8 +407,8 @@ def insertText(textWidget, text):
     textWidget.insert(1.0, text)
     textWidget.configure(state='disabled')
 
-def searchListById(list, Id):
-    for elem in list:
+def searchListById(theList, Id):
+    for elem in theList:
         if elem.id == Id:
             return elem
     return None
@@ -449,14 +448,14 @@ def updateDcInteractionRules(dataComponent, predicatesDF, dcIrTreeView):
         if not pandas.isna(predicatesDF["DataComponent"][i]) and predicatesDF["DataComponent"][i].startswith(dataComponent):
             lineTag = 'line'+str(len(dcIrTreeView.get_children()) % 2)
             dcIrTreeView.insert('', 'end', text="1", values=(predicatesDF["DataComponent"][i], predicatesDF["Predicate"][i]), tag=lineTag)
-    dcIrTreeView.tag_configure('line0', background='gray') # This highlights each second line, but the highlight is not visible in every monitor
+    dcIrTreeView.tag_configure('line0', background='gray')  # This highlights each second line, but the highlight is not visible in every monitor
 
 # Build list of entities (and their synonyms)
 # Highlight entities that appear in the description of selected Tactic/Technique/Sub-technique
 def updateEntities(predicatesDF, entitiesDF, entitiesListBox, entitiesInTactic, entitiesInTechnique, entitiesInSubtechnique):
     entities = []
     for i in predicatesDF.index:
-        if  not (predicatesDF["Entity"][i] in entities) and str(predicatesDF["Question"][i]) != '' and str(predicatesDF["Predicate"][i]) != '':
+        if not (predicatesDF["Entity"][i] in entities) and str(predicatesDF["Question"][i]) != '' and str(predicatesDF["Predicate"][i]) != '':
             entities.append(predicatesDF["Entity"][i])
     for i in range(len(entities)):
         if pandas.isna(entities[i]):
@@ -537,7 +536,7 @@ if __name__ == '__main__':
     # We will use this data structure also to find connections between Techniques and CAPEC
     stix_json = requests.get(f"https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json").json()
     attackStix = MemoryStore(stix_data=stix_json["objects"])
-    #printTacticTecniqueFromStix(attackStix)
+    #printTacticTechniqueFromStix(attackStix)
 
     # Read relationships, which include Data Components, from CSV to DataFrame
     # Source of "techniques_to_relationships_mapping.csv":https://github.com/mitre-attack/attack-datasources/tree/main/docs
