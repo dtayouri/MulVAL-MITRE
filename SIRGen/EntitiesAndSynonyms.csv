@@ -1,6 +1,6 @@
 Entity,Synonyms
 Software,"tool, program, code, library, process, component"
-User,"principal, group"
+User,principal
 Host,"server, instance, computer, machine"
 Virtual Machine,"VM, instance"
 Device,
@@ -8,9 +8,9 @@ Network,"net, subnet"
 File,path
 Memory Range,
 Vulnerability,CVE
-Account,permissions
+Account,
 Service,
 Port,protocol
 IP,address
 Traffic Flow,data flow
-Access,"read, write, execute"
+Permission,"access, role, privilege"

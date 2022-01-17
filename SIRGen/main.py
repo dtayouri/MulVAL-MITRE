@@ -493,7 +493,8 @@ def updateQuestions(selectedEntity, predicatesDF, questionsListBox):
 def updateQuestionsIr(selectedQuestion, predicatesDF, questionsIrListBox):
     questionIrs = []
     for i in predicatesDF.index:
-        if predicatesDF["Question"][i] == selectedQuestion and str(predicatesDF["Predicate"][i]) != '':
+        if predicatesDF["Question"][i] == selectedQuestion and str(predicatesDF["Predicate"][i]) != ''\
+                and predicatesDF["Predicate"][i] not in questionIrs:
             questionIrs.append(predicatesDF["Predicate"][i])
     for i in range(len(questionIrs)):
         questionsIrListBox.insert(i, questionIrs[i])
