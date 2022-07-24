@@ -1,21 +1,20 @@
 import pandas
-import numpy
 import tkinter
 from tkinter import *
 from tkinter import ttk
-import webbrowser
 import textwrap
 import checklistcombobox as clc
+import queue
 
 FIRST_COLUMN_WIDTH = 500
 SECOND_COLUMN_WIDTH = 550
 
-# Wraps the given string by every length characters
-def wrap(string, lenght=40):
-    return '\n'.join(textwrap.wrap(string, lenght))
+# Wrap the given string by every length characters
+def wrap(string, length=40):
+    return '\n'.join(textwrap.wrap(string, length))
 
 # Main GUI method
-def displayTTP(irsDF):
+def displayIrs(irsDF):
     # Filter the list by filter options
     def filterList():
         # If filter by IR head or body is required
@@ -75,7 +74,7 @@ def displayTTP(irsDF):
         techniqueList = buildIrList(irsDF, irTreeView)
 
     def createPddl():
-        createPddlFile(irTreeView)
+        createPddlFile(irsDF, irTreeView)
 
     # When hovering over a row show the IR in a tooltip window
     def showTooltip(event):
@@ -85,7 +84,7 @@ def displayTTP(irsDF):
         if item != '':
             if event.x < FIRST_COLUMN_WIDTH:
                 tipText = tree.item(item, "values")[0]
-            elif event.x > FIRST_COLUMN_WIDTH and event.x < FIRST_COLUMN_WIDTH+SECOND_COLUMN_WIDTH:
+            elif FIRST_COLUMN_WIDTH < event.x < FIRST_COLUMN_WIDTH+SECOND_COLUMN_WIDTH:
                 tipText = tree.item(item, "values")[1]
             else:
                 tipText = tree.item(item, "values")[2]
@@ -105,7 +104,6 @@ def displayTTP(irsDF):
     mainframe.columnconfigure(0, weight=1)
     mainframe.rowconfigure(0, weight=1)
     mainframe.pack(pady=20, padx=20)
-    fontTuple = ("Times new roman", 11, "normal")
 
     Label(mainframe, text="Filter by", height=2).grid(row=1, column=1)
     Label(mainframe, text="Rule Head:", width=20, height=2).grid(row=2, column=1)
@@ -126,7 +124,7 @@ def displayTTP(irsDF):
     createPddlButton.grid(row=4, column=9, columnspan=1, rowspan=1)
 
     Label(mainframe, text="", height=1).grid(row=5, column=1)
-    irTreeView = ttk.Treeview(mainframe, column=(1, 2, 3), show='headings')
+    irTreeView = ttk.Treeview(mainframe, columns=(1, 2, 3), show='headings')
     irTreeView.column(1, anchor=W, width=FIRST_COLUMN_WIDTH)
     irTreeView.column(2, anchor=W, width=SECOND_COLUMN_WIDTH)
     irTreeView.column(3, anchor=CENTER, width=270)
@@ -150,7 +148,7 @@ def displayTTP(irsDF):
     style = ttk.Style()
     style.theme_use("clam")
     style.map("Treeview")
-    style.configure('Treeview', rowheight=70)  # Add the rowheight
+    style.configure('Treeview', rowheight=70)  # Add the row height
 
     root.mainloop()
 
@@ -161,6 +159,9 @@ def buildIrList(irsDF, irTreeView):
     for irItem in irTreeView.get_children():
         irTreeView.delete(irItem)
     for i in irsDF.index:
+        primitiveOrDerived = irsDF["Primitive/Derived"][i]
+        if "Complex" in primitiveOrDerived or "Mixed" in primitiveOrDerived:
+            continue
         ir = irsDF["Interaction Rules"][i]
         if pandas.isna(ir) or ir == '':
             ir = irsDF["Predicate"][i]
@@ -169,19 +170,22 @@ def buildIrList(irsDF, irTreeView):
         wrappedDesc = wrap(irsDF["Explanation"][i], 100)
         mappedTechnique = irsDF["MITRE Enterprise Technique"][i]
         for technique in mappedTechnique.split('\n'):
-            if technique.strip() != '' and not technique in techniqueList:
+            if technique.strip() != '' and technique not in techniqueList:
                 techniqueList.append(technique)
         lineTag = 'line'+str(len(irTreeView.get_children()) % 2)
         irTreeView.insert('', 'end', text="1", values=(ir, wrappedDesc, mappedTechnique), tag=lineTag)
-    irTreeView.tag_configure('line0', background='gray')  # This highlights each second line, but the highlight is not visible in every monitor
+    irTreeView.tag_configure('line0', background='lightgray')  # This highlights each second line (not always visible)
     return techniqueList
 
-
-# Save the filtered rows of IR TreeView as PDDL file
-# Todo: Smart Recursive Save: The user may request to export a selected (filtered) set of IRs.
+# Save the filtered rows of IR TreeView as PDDL file.
+# Smart Recursive Save: The user may request to export a selected (filtered) set of IRs.
 # In this case, all the predicates in the body of the IR should be checked – if they are IRs themselves,
-# all the instances should also be saved
-def createPddlFile(irTreeView):
+# they should also be saved
+def createPddlFile(irsDF, irTreeView):
+    # Before saving, for each IR bring the IRs it uses
+    # Each primitive/derived is a set of (irSignature, ir, generalizedIr, description)
+    primitives, deriveds, uniqueDeriveds = findAllRequiredIrs(irsDF, irTreeView)
+
     fileStream = open("IRs.p", "w")
     fileStream.write('/*************************/\n'
                      '/ Predicates Declarations /\n'
@@ -189,22 +193,14 @@ def createPddlFile(irTreeView):
     # Sample output:
     # primitive(dependsOn(_software, _component)).
     # derived(vulnerableSoftware(_software)).
-    primitives = []
-    deriveds = []
-    for row in irTreeView.get_children():
-        ir = irTreeView.item(row, "values")[0]
-        mappedTechnique = irTreeView.item(row, "values")[2]
-        generalizedIr, irName = generalize(ir)
-        if mappedTechnique == 'Fact':  # This is a primitive
-            if irName in primitives:
-                continue
-            primitives.append(irName)
-            line = "primitive({}).\n".format(generalizedIr)
-        else:  # This is a derived
-            if irName in deriveds:
-                continue
-            deriveds.append(irName)
-            line = "derived({}).\n".format(generalizedIr)
+    for primitive in primitives:
+        generalizedPredicate = primitive[2]
+        line = "primitive({}).\n".format(generalizedPredicate)
+        fileStream.write(line)
+
+    for derived in uniqueDeriveds:
+        generalizedPredicate = derived[2]
+        line = "derived({}).\n".format(generalizedPredicate)
         fileStream.write(line)
 
     line = "\nmeta(attackGoal(_)).\n\n"
@@ -216,8 +212,9 @@ def createPddlFile(irTreeView):
                      '/*******************************************/\n')
     # Sample output:
     # :- table vulnerableSoftware/1.
-    for derived in deriveds:
-        line = ":- table {}.\n".format(derived)
+    for derived in uniqueDeriveds:
+        irSignature = derived[0]
+        line = ":- table {}.\n".format(irSignature)
         fileStream.write(line)
 
     fileStream.write('\n/*******************/\n'
@@ -228,12 +225,9 @@ def createPddlFile(irTreeView):
     #   (vulnerableComponent(Component) :-
     #     vulExists(_cvId, Component, _range_types, _lose_types, _severity, _access)),
     #   rule_desc('vulnerability in a component', 1.0)).
-    for row in irTreeView.get_children():
-        ir = irTreeView.item(row, "values")[0]
-        description = irTreeView.item(row, "values")[1].replace('\n', ' ')  # Remove new lines
-        mappedTechnique = irTreeView.item(row, "values")[2]
-        if mappedTechnique == 'Fact':  # This is a primitive
-            continue
+    for derived in deriveds:
+        ir = derived[1]
+        description = derived[3]
         lastDot = ir.rfind('.')
         if lastDot != -1:
             ir = ir[0:lastDot]
@@ -242,9 +236,68 @@ def createPddlFile(irTreeView):
 
     fileStream.close()
 
-# Generalize given IR parameters by adding '_' at the bgeining of each parameter
-def generalize(ir):
+# Return the list of selected IRs (divided to primitives and deriveds) and the IRs used by them.
+# First handle the selected IRs (put them in the lists), and put the derived ones in a queue.
+# For each IR in the queue, bring its body/bodies (the same IR signature may have several implementations);
+# After handling the body's IRs, put the derived ones in a queue, and so on recursively.
+def findAllRequiredIrs(irsDF, irTreeView):
+    primitives = []
+    deriveds = []
+    uniqueDeriveds = []
+    irsToHandleQueue = queue.Queue()
+    for row in irTreeView.get_children():
+        ir = irTreeView.item(row, "values")[0]
+        _, irSignature, _ = generalizeIrParams(ir)
+        irsToHandleQueue.put(irSignature)
+
+    # Search the irSignature in the irsDF, and for each instance, add it to list and add the body predicates to queue
+    missingIrs = []
+    while not irsToHandleQueue.empty():
+        irToHandle = irsToHandleQueue.get()
+        irFound = False
+        for i in irsDF.index:
+            primitiveOrDerived = irsDF["Primitive/Derived"][i]
+            if "Complex" in primitiveOrDerived or "Mixed" in primitiveOrDerived:
+                continue
+            ir = irsDF["Interaction Rules"][i]
+            if pandas.isna(ir) or ir == '':
+                ir = irsDF["Predicate"][i]
+            if pandas.isna(ir) or ir.strip() == '':  # If there is no IR or fact, ignore
+                continue
+            description = irsDF["Explanation"][i]
+            generalizedIr, irSignature, isDerived = generalizeIrParams(ir)
+            if irSignature != irToHandle:
+                continue
+            irFound = True
+            if not isDerived:  # This is a primitive
+                if not isInList(irSignature, primitives):
+                    primitives.append((irSignature, ir, generalizedIr, description))
+                continue
+            # This is a derived
+            if not isInList(irSignature, uniqueDeriveds):
+                uniqueDeriveds.append((irSignature, ir, generalizedIr, description))
+            # deriveds may include several instances of the same IR signature
+            # Todo: hanlde cases that ir cell includes a Mixed set of IRs (SIR)
+            deriveds.append((irSignature, ir, generalizedIr, description))
+            bodyIrs = getBodyIrs(ir)
+            for bodyIr in bodyIrs:
+                _, irSignature, _ = generalizeIrParams(bodyIr)
+                if not isInList(irSignature, uniqueDeriveds):
+                    irsToHandleQueue.put(irSignature)
+
+        if not irFound:
+            if irToHandle not in missingIrs:
+                missingIrs.append(irToHandle)
+
+    for missingIr in missingIrs:
+        print("The IR '{}' was not found in the whole list of IRs".format(missingIr))
+
+    return primitives, deriveds, uniqueDeriveds
+
+# Generalize given IR head's parameters by adding '_' at the bgeining of each parameter
+def generalizeIrParams(ir):
     # Remove body and last dot (if any)
+    isDerived = False
     divider = ir.find(':-')
     if divider == -1:  # Primitive
         divider = ir.find('.')
@@ -254,36 +307,67 @@ def generalize(ir):
             irHead = ir[0:divider]
     else:
         irHead = ir[0:divider]
+        isDerived = True
 
+    generalizedIr, irSignature = generalizePredicateAndGetSignature(irHead.strip())
+    return generalizedIr, irSignature, isDerived
+
+# Generalize given predicate parameters by adding '_' at the beginning of each parameter
+# Return also the predicate signature in the form of predicateName/numberOfParams
+def generalizePredicateAndGetSignature(predicate):
     # Add '_' to each parameter (if not already exists)
     paramCount = 0
-    irHead = irHead.strip()
-    divider = irHead.find('(')
-    irName = irHead[0:divider]
-    generalizedIr = irName + '('
-    nextDivider = irHead.find(',')
+    divider = predicate.find('(')
+    predicateName = predicate[0:divider]
+    generalizedPredicate = predicateName + '('
+    nextDivider = predicate.find(',')
     while nextDivider != -1:
-        param = irHead[divider+1:nextDivider].strip()
+        param = predicate[divider+1:nextDivider].strip()
         if not param.startswith('_'):
             param = '_' + param
-        generalizedIr += param + ', '
+        generalizedPredicate += param + ', '
         paramCount += 1
         divider = nextDivider
-        nextDivider = irHead.find(',', divider+1)
-    nextDivider = irHead.find('),', divider+1)
-    param = irHead[divider+1:nextDivider].strip()
+        nextDivider = predicate.find(',', divider+1)
+    nextDivider = predicate.find('),', divider+1)
+    param = predicate[divider+1:nextDivider].strip()
     if not param.startswith('_'):
         param = '_' + param
-    generalizedIr += param + ')'
+    generalizedPredicate += param + ')'
     paramCount += 1
 
-    # Add to irName the number of parameters
-    irName = "{}/{}".format(irName, paramCount)
+    # Add to predicateName the number of parameters
+    predicateSignature = "{}/{}".format(predicateName, paramCount)
 
-    return generalizedIr, irName
+    return generalizedPredicate, predicateSignature
+
+# Check if the IR signature is in the list that includes sets of (irSignature, ir, generalizedIr, description)
+def isInList(irSignature, irList):
+    for irSet in irList:
+        if irSignature == irSet[0]:
+            return True
+    return False
+
+# Return IR's body as list of predicates
+def getBodyIrs(ir):
+    bodyPredicates = []
+    divider = ir.find(':-')
+    if divider != -1:
+        body = ir[divider+2:].strip()
+        divider = 0
+        nextDivider = body.find(')')
+        while nextDivider != -1:
+            predicate = body[divider:nextDivider+1].strip()
+            if predicate not in bodyPredicates:
+                bodyPredicates.append(predicate)
+            divider = nextDivider + 2  # 2 is for '),'
+            nextDivider = body.find(')', divider)
+
+    return bodyPredicates
+
 
 if __name__ == '__main__':
     # Read relationships, which include Data Components, from CSV to DataFrame
     irsFilePath = "file:MulVAL to MITRE-for IRMA.xlsx"  # Read from local path
     irsDF = pandas.read_excel(irsFilePath, keep_default_na=False)
-    displayTTP(irsDF)
+    displayIrs(irsDF)
