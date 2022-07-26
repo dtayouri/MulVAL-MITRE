@@ -73,6 +73,55 @@ def displayIrs(irsDF):
         techniqueFilterCombo.set('')
         techniqueList = buildIrList(irsDF, irTreeView)
 
+    # Find and display the IRs that are used by the filtered IRs, recursively
+    def dependentIrs():
+        popup = tkinter.Tk()
+        popup.title("IRs Used by the Filtered IRs")
+        popup.geometry("320x800")
+        popupframe = Frame(popup)
+
+        primitives, deriveds, uniqueDeriveds, missings = findAllRequiredIrs(irsDF, irTreeView)
+
+        popupframe.grid(column=0, row=0, columnspan=2, rowspan=11, sticky=(N, W, E, S))
+        popupframe.columnconfigure(0, weight=1)
+        popupframe.rowconfigure(0, weight=1)
+        popupframe.pack(pady=20, padx=20)
+
+        Label(popupframe, text="Primitive IRs:", height=2).grid(row=1, column=1)
+        primitivesListBox = Listbox(popupframe, height=13, width=42)
+        primitivesScroll = Scrollbar(popupframe)
+        primitivesListBox.configure(yscrollcommand=primitivesScroll.set)
+        primitivesListBox.grid(row=2, column=1, columnspan=1, rowspan=2)
+        primitivesScroll.config(command=primitivesListBox.yview)
+        primitivesScroll.grid(row=2, column=2, columnspan=1, rowspan=2, sticky='ENS')
+        for i in range(len(primitives)):
+            primitivesListBox.insert(i, primitives[i][0])
+
+        Label(popupframe, text="Derived IRs:", height=2).grid(row=4, column=1)
+        derivedsListBox = Listbox(popupframe, height=13, width=42)
+        derivedsScroll = Scrollbar(popupframe)
+        derivedsListBox.configure(yscrollcommand=derivedsScroll.set)
+        derivedsListBox.grid(row=5, column=1, columnspan=1, rowspan=2)
+        derivedsScroll.config(command=derivedsListBox.yview)
+        derivedsScroll.grid(row=5, column=2, columnspan=1, rowspan=2, sticky='ENS')
+        for i in range(len(uniqueDeriveds)):
+            derivedsListBox.insert(i, uniqueDeriveds[i][0])
+
+        Label(popupframe, text="Missing IRs:", height=2).grid(row=7, column=1)
+        missingsListBox = Listbox(popupframe, height=11, width=42)
+        missingsScroll = Scrollbar(popupframe)
+        missingsListBox.configure(yscrollcommand=missingsScroll.set)
+        missingsListBox.grid(row=8, column=1, columnspan=1, rowspan=2)
+        missingsScroll.config(command=missingsListBox.yview)
+        missingsScroll.grid(row=8, column=2, columnspan=1, rowspan=2, sticky='ENS')
+        for i in range(len(missings)):
+            missingsListBox.insert(i, missings[i])
+
+        Label(popupframe, text="", height=1).grid(row=10, column=1)
+        closeButton = Button(popupframe, text="Close", command=popup.destroy)
+        closeButton.grid(row=11, column=1, columnspan=1, rowspan=1)
+        popupframe.mainloop()
+
     def createPddl():
         createPddlFile(irsDF, irTreeView)
 
@@ -120,6 +169,8 @@ def displayIrs(irsDF):
     filterButton.grid(row=4, column=5, columnspan=1, rowspan=1)
     clearButton = Button(mainframe, text='Clear Filter', width=15, command=clearFilter)
     clearButton.grid(row=4, column=6, columnspan=1, rowspan=1)
+    dependentIrsButton = Button(mainframe, text='Dependent IRs', width=15, command=dependentIrs)
+    dependentIrsButton.grid(row=4, column=8, columnspan=1, rowspan=1)
     createPddlButton = Button(mainframe, text='Create PDDL File', width=15, command=createPddl)
     createPddlButton.grid(row=4, column=9, columnspan=1, rowspan=1)
 
@@ -184,7 +235,9 @@ def buildIrList(irsDF, irTreeView):
 def createPddlFile(irsDF, irTreeView):
     # Before saving, for each IR bring the IRs it uses
     # Each primitive/derived is a set of (irSignature, ir, generalizedIr, description)
-    primitives, deriveds, uniqueDeriveds = findAllRequiredIrs(irsDF, irTreeView)
+    primitives, deriveds, uniqueDeriveds, missingIrs = findAllRequiredIrs(irsDF, irTreeView)
+    for missingIr in missingIrs:
+        print("The IR '{}' was not found in the list of IRs".format(missingIr))
 
     fileStream = open("IRs.p", "w")
     fileStream.write('/*************************/\n'
@@ -289,10 +342,7 @@ def findAllRequiredIrs(irsDF, irTreeView):
             if irToHandle not in missingIrs:
                 missingIrs.append(irToHandle)
 
-    for missingIr in missingIrs:
-        print("The IR '{}' was not found in the whole list of IRs".format(missingIr))
-
-    return primitives, deriveds, uniqueDeriveds
+    return primitives, deriveds, uniqueDeriveds, missingIrs
 
 # Generalize given IR head's parameters by adding '_' at the bgeining of each parameter
 def generalizeIrParams(ir):
