@@ -213,7 +213,7 @@ def buildIrList(irsDF, irTreeView):
         primitiveOrDerived = irsDF["Primitive/Derived"][i]
         if "Complex" in primitiveOrDerived or "Mixed" in primitiveOrDerived:
             continue
-        ir = irsDF["Interaction Rules"][i]
+        ir = irsDF["Normalized Rules"][i]
         if pandas.isna(ir) or ir == '':
             ir = irsDF["Predicate"][i]
         if pandas.isna(ir) or ir.strip() == '':  # If there is no IR or fact, ignore
@@ -226,6 +226,7 @@ def buildIrList(irsDF, irTreeView):
         lineTag = 'line'+str(len(irTreeView.get_children()) % 2)
         irTreeView.insert('', 'end', text="1", values=(ir, wrappedDesc, mappedTechnique), tag=lineTag)
     irTreeView.tag_configure('line0', background='lightgray')  # This highlights each second line (not always visible)
+    techniqueList.sort()
     return techniqueList
 
 # Save the filtered rows of IR TreeView as PDDL file.
@@ -312,7 +313,7 @@ def findAllRequiredIrs(irsDF, irTreeView):
             primitiveOrDerived = irsDF["Primitive/Derived"][i]
             if "Complex" in primitiveOrDerived or "Mixed" in primitiveOrDerived:
                 continue
-            ir = irsDF["Interaction Rules"][i]
+            ir = irsDF["Normalized Rules"][i]
             if pandas.isna(ir) or ir == '':
                 ir = irsDF["Predicate"][i]
             if pandas.isna(ir) or ir.strip() == '':  # If there is no IR or fact, ignore
@@ -418,6 +419,6 @@ def getBodyIrs(ir):
 
 if __name__ == '__main__':
     # Read relationships, which include Data Components, from CSV to DataFrame
-    irsFilePath = "file:MulVAL to MITRE-for IRMA.xlsx"  # Read from local path
+    irsFilePath = "file:MulVAL to MITRE-Normalized.xlsx"  # Read from local path
     irsDF = pandas.read_excel(irsFilePath, keep_default_na=False)
     displayIrs(irsDF)
