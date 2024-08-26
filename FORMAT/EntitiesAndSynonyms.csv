@@ -1,0 +1,16 @@
+Entity,Synonyms
+Software,"tool, program, code, library, process, component"
+User,principal
+Host,"server, instance, computer, machine"
+Network,"net, subnet"
+File,path
+Permission,"access, role, privilege"
+Account,
+Service,
+Virtual Machine,"VM, instance"
+Device,
+Memory Range,
+Vulnerability,CVE
+Port,protocol
+IP,address
+Traffic Flow,data flow
