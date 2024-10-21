@@ -255,7 +255,8 @@ def displayTTP(attackStix, relationshipsDF, predicatesDF, entitiesDF):
     # Use LLM to validate IR syntax
     def validateIrSyntax():
         deleteText(syntaxText)
-        syntaxValidationOutput = llm.invoke(syntaxValidationPrompt + irConstructionText.get("1.0", "end-1c"))
+        syntaxValidationOutput = llm.invoke("The following rule is written in Datalog: " +
+            irConstructionText.get("1.0", "end-1c") + syntaxValidationPrompt)
         insertText(syntaxText, syntaxValidationOutput)
 
     root = tkinter.Tk()
@@ -366,8 +367,8 @@ def displayTTP(attackStix, relationshipsDF, predicatesDF, entitiesDF):
     entitiesPredicatesScroll.grid(row=8, column=17, columnspan=1, rowspan=3, sticky='ENS')
     entitiesPredicatesListBox.bind("<Double-1>", entitiesPredicatesDoubleClicked)
 
-    Button(mainframe, text="Predicates from Description (LLM)", height=1, command=predicatesFromDescription).\
-        grid(row=11, column=13, sticky=W)
+    # Button(mainframe, text="Predicates from Description (LLM)", height=1, command=predicatesFromDescription).\
+    #    grid(row=11, column=13, sticky=W)
 
     Button(mainframe, text="User as Attacker", height=1, command=userAsAttacker).grid(row=12, column=13, sticky=W)
 
@@ -381,7 +382,7 @@ def displayTTP(attackStix, relationshipsDF, predicatesDF, entitiesDF):
     systemRequirementsText = Text(mainframe, height=2, width=70, padx=2, pady=2, wrap=WORD)
     systemRequirementsText.grid(row=16, column=13, columnspan=3, sticky=W)
     systemRequirementsText.configure(font=fontTuple, state='disabled')
-    Button(mainframe, text="Add Predicate", height=1, command=handleSystemRequirements).grid(row=16, column=15, sticky=W)
+    # Button(mainframe, text="Add Predicate", height=1, command=handleSystemRequirements).grid(row=16, column=15, sticky=W)
 
     Label(mainframe, text="Platforms: ", height=2).grid(row=17, column=13, sticky=W)
     techniquePlatformsText = Text(mainframe, height=1, width=70, padx=2, pady=2, wrap=WORD)
@@ -399,12 +400,13 @@ def displayTTP(attackStix, relationshipsDF, predicatesDF, entitiesDF):
     syntaxScroll.grid(row=20, column=17, columnspan=1, rowspan=4, sticky='ENS')
 
     modelPath = r"C:\Users\dtayo\AppData\Local\nomic.ai\GPT4All\Meta-Llama-3.1-8B-Instruct-128k-Q4_0.gguf"
-    llm = GPT4All(model=modelPath, n_predict=200)
-    syntaxValidationPrompt = "The following rule is written in Datalog. Validate that the rule's parameters are correct,\
-    that there are no duplicate parameters,\
-    that every parameter in the rule head used in the rule body,\
-    that all the parameters in the rule's body appear in the rule's head.\
-    Display only errors."
+    llm = GPT4All(model=modelPath, temp=0.1, n_predict=500)
+    syntaxValidationPrompt = "Answer the following questions: \
+    Are the rule's parameters correct? \
+    Are there any duplicate parameters? \
+    Are there any parameters in the rule head that do not appear in the rule body? \
+    Are there any parameters in the rule's body that do not appear in the rule's head? \
+    Is the rule recursive?"
 
     style = ttk.Style()
     style.theme_use("clam")
